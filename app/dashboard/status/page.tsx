@@ -289,37 +289,95 @@ export default function StatusPage() {
         </Card>
 
         {/* Validation Status */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              Document Verification
-              <Badge variant="outline" className={getValidationColor(validationStatus)}>
-                {validationStatus === "verified" && "All Verified"}
-                {validationStatus === "warning" && "Review Needed"}
-                {validationStatus === "error" && "Issues Found"}
-                {validationStatus === "pending" && "Pending"}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <dl className="space-y-3 text-sm">
-              {Object.entries(application.validation).map(([key, value]) => (
-                <div key={key} className="flex justify-between items-center">
-                  <dt className="text-muted-foreground capitalize">
-                    {key.replace("Match", "")} Verification
-                  </dt>
-                  <dd className="flex items-center gap-1">
-                    {value === "verified" && <CheckCircle className="h-4 w-4 text-emerald-600" />}
-                    {value === "warning" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
-                    {value === "error" && <XCircle className="h-4 w-4 text-red-500" />}
-                    {value === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
-                    <span className={getValidationColor(value)}>{value}</span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </CardContent>
-        </Card>
+ {/* Validation Status */}
+<Card>
+  <CardHeader>
+    <CardTitle className="text-lg flex items-center gap-2">
+      Document Verification
+      <Badge variant="outline" className={getValidationColor(validationStatus)}>
+        {validationStatus === "verified" && "All Verified"}
+        {validationStatus === "warning" && "Review Needed"}
+        {validationStatus === "error" && "Issues Found"}
+        {validationStatus === "pending" && "Pending"}
+      </Badge>
+    </CardTitle>
+  </CardHeader>
+  <CardContent>
+    <dl className="space-y-3 text-sm">
+      {/* Name Validation */}
+      <div className="flex justify-between items-center">
+        <dt className="text-muted-foreground">Name Verification</dt>
+        <dd className="flex items-center gap-1">
+          {application.validation.nameMatch === "verified" && <CheckCircle className="h-4 w-4 text-emerald-600" />}
+          {application.validation.nameMatch === "warning" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
+          {application.validation.nameMatch === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+          {application.validation.nameMatch === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
+          <span className={getValidationColor(application.validation.nameMatch)}>
+            {application.validation.nameMatch}
+          </span>
+        </dd>
+      </div>
+      
+      {/* Marks Validation */}
+      <div className="flex justify-between items-center">
+        <dt className="text-muted-foreground">Marks Verification</dt>
+        <dd className="flex items-center gap-1">
+          {application.validation.marksMatch === "verified" && <CheckCircle className="h-4 w-4 text-emerald-600" />}
+          {application.validation.marksMatch === "warning" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
+          {application.validation.marksMatch === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+          {application.validation.marksMatch === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
+          <span className={getValidationColor(application.validation.marksMatch)}>
+            {application.validation.marksMatch}
+          </span>
+        </dd>
+      </div>
+      
+      {/* Category Validation */}
+      <div className="flex justify-between items-center">
+        <dt className="text-muted-foreground">Category Verification</dt>
+        <dd className="flex items-center gap-1">
+          {application.validation.categoryMatch === "verified" && <CheckCircle className="h-4 w-4 text-emerald-600" />}
+          {application.validation.categoryMatch === "warning" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
+          {application.validation.categoryMatch === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+          {application.validation.categoryMatch === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
+          <span className={getValidationColor(application.validation.categoryMatch)}>
+            {application.validation.categoryMatch}
+          </span>
+        </dd>
+      </div>
+      
+      {/* Aadhaar Validation */}
+      <div className="flex justify-between items-center">
+        <dt className="text-muted-foreground">Aadhaar Verification</dt>
+        <dd className="flex items-center gap-1">
+          {application.validation.aadhaarMatch === "verified" && <CheckCircle className="h-4 w-4 text-emerald-600" />}
+          {application.validation.aadhaarMatch === "warning" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
+          {application.validation.aadhaarMatch === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+          {application.validation.aadhaarMatch === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
+          <span className={getValidationColor(application.validation.aadhaarMatch)}>
+            {application.validation.aadhaarMatch}
+          </span>
+        </dd>
+      </div>
+      
+      {/* Cross Document Validation (if exists) */}
+      {application.validation.crossDocumentStatus && (
+        <div className="flex justify-between items-center">
+          <dt className="text-muted-foreground">Cross Document Verification</dt>
+          <dd className="flex items-center gap-1">
+            {application.validation.crossDocumentStatus === "verified" && <CheckCircle className="h-4 w-4 text-emerald-600" />}
+            {application.validation.crossDocumentStatus === "warning" && <AlertTriangle className="h-4 w-4 text-amber-500" />}
+            {application.validation.crossDocumentStatus === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+            {application.validation.crossDocumentStatus === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
+            <span className={getValidationColor(application.validation.crossDocumentStatus)}>
+              {application.validation.crossDocumentStatus}
+            </span>
+          </dd>
+        </div>
+      )}
+    </dl>
+  </CardContent>
+</Card>
 
         {/* Room Info */}
         <Card>

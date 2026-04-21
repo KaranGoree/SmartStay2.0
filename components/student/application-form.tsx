@@ -24,6 +24,28 @@ import { ArrowLeft, ArrowRight, Save, Send, Download, CheckCircle, AlertCircle, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { validateDocumentsWithoutAI, calculateNameSimilarity } from "@/lib/utils/document-verification"
 
+// Helper function to clean undefined values for Firestore
+const cleanForFirestore = (obj: any): any => {
+  if (obj === undefined) return null;
+  if (obj === null) return null;
+  if (typeof obj !== 'object') return obj;
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanForFirestore(item));
+  }
+  
+  const cleaned: any = {};
+  for (const key in obj) {
+    const value = obj[key];
+    if (value !== undefined) {
+      cleaned[key] = cleanForFirestore(value);
+    } else {
+      cleaned[key] = null;
+    }
+  }
+  return cleaned;
+};
+
 const applicationSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
@@ -100,9 +122,13 @@ export function ApplicationForm() {
   const [ocrData, setOcrData] = useState<OCRData>({
     extractedName: "",
     extractedMarks: null,
+    extractedSGPA: null,
     extractedCategory: "",
     extractedAadhaar: "",
     extractedCollege: "",
+    extractedRollNo: "",
+    extractedDOB: "",
+    extractedPercentage: null,
     confidence: 0,
   })
 
@@ -160,7 +186,18 @@ export function ApplicationForm() {
             profilePhoto: app.documents?.profilePhoto || "",
             signature: app.documents?.signature || "",
           })
-          setOcrData(app.ocrData)
+          setOcrData(app.ocrData || {
+            extractedName: "",
+            extractedMarks: null,
+            extractedSGPA: null,
+            extractedCategory: "",
+            extractedAadhaar: "",
+            extractedCollege: "",
+            extractedRollNo: "",
+            extractedDOB: "",
+            extractedPercentage: null,
+            confidence: 0,
+          })
           setCrossDocValidation(app.crossDocumentValidation)
           setExtractedData(app.extractedData)
         }
@@ -176,15 +213,16 @@ const handleOCRComplete = (type: "marksheet" | "aadhaarCard" | "categoryProof", 
   console.log(`   - Raw Text Length: ${rawText?.length || 0}`);
   
   if (type === "marksheet") {
-    // IMPORTANT: Store the extracted SGPA in state
     setOcrData((prev) => ({
       ...prev,
       extractedName: data.extractedName || prev.extractedName,
-      extractedSGPA: data.extractedSGPA || prev.extractedSGPA,  // ← Make sure this is stored
-      extractedMarks: data.extractedMarks || prev.extractedMarks,
+      extractedSGPA: data.extractedSGPA ?? prev.extractedSGPA,
+      extractedMarks: data.extractedMarks ?? prev.extractedMarks,
       extractedRollNo: data.extractedRollNo || prev.extractedRollNo,
       extractedCollege: data.extractedCollege || prev.extractedCollege,
-      confidence: data.confidence || prev.confidence,
+      extractedDOB: data.extractedDOB || prev.extractedDOB,
+      extractedPercentage: data.extractedPercentage ?? prev.extractedPercentage,
+      confidence: data.confidence ?? prev.confidence,
     }))
 
     setRawOCRTexts((prev) => ({
@@ -192,7 +230,6 @@ const handleOCRComplete = (type: "marksheet" | "aadhaarCard" | "categoryProof", 
       [type]: rawText,
     }))
     
-    // Debug log to verify SGPA is stored
     console.log(`✅ Stored SGPA in ocrData: ${data.extractedSGPA}`);
   } else {
     setOcrData((prev) => ({
@@ -261,15 +298,11 @@ const handleOCRComplete = (type: "marksheet" | "aadhaarCard" | "categoryProof", 
     printWindow.document.close()
   }
 
-  // Verify user input against extracted documents
- // In application-form.tsx, update this function:
-
 const verifyUserInputWithDocuments = () => {
   const formData = getValues();
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Name comparison
   if (extractedData?.fullName && formData.fullName) {
     const nameSimilarity = calculateNameSimilarity(formData.fullName, extractedData.fullName);
     console.log(`📝 Form vs Document name similarity: ${nameSimilarity}%`)
@@ -283,7 +316,6 @@ const verifyUserInputWithDocuments = () => {
     warnings.push(`Name not entered in form. Document shows "${extractedData.fullName}"`);
   }
 
-  // Aadhaar comparison
   if (extractedData?.aadhaarNumber && formData.aadhaarNumber) {
     if (extractedData.aadhaarNumber !== formData.aadhaarNumber) {
       errors.push(`Aadhaar mismatch: Form "${formData.aadhaarNumber}" doesn't match document "${extractedData.aadhaarNumber}"`);
@@ -292,7 +324,6 @@ const verifyUserInputWithDocuments = () => {
     warnings.push(`Aadhaar not entered in form. Document shows "${extractedData.aadhaarNumber}"`);
   }
 
-  // SGPA/Marks comparison
   if (admissionType === "CET" && extractedData?.marks && formData.cetMarks) {
     const marksDiff = Math.abs(extractedData.marks - formData.cetMarks);
     if (marksDiff > 10) {
@@ -309,7 +340,6 @@ const verifyUserInputWithDocuments = () => {
     }
   }
 
-  // Category comparison
   if (extractedData?.category && formData.category) {
     const extractedCat = extractedData.category.toUpperCase();
     const formCat = formData.category.toUpperCase();
@@ -322,9 +352,7 @@ const verifyUserInputWithDocuments = () => {
   return { isValid: errors.length === 0, errors, warnings };
 };
 
-
 const processDocumentVerification = async () => {
-  // Check if documents are uploaded
   if (!documents.marksheet) {
     toast.error("Please upload Marksheet first")
     return
@@ -334,7 +362,6 @@ const processDocumentVerification = async () => {
     return
   }
 
-  // Check if OCR texts are available
   if (!rawOCRTexts.marksheet || !rawOCRTexts.aadhaarCard) {
     toast.error("OCR processing not complete. Please wait for document processing.")
     return
@@ -347,16 +374,15 @@ const processDocumentVerification = async () => {
       rawOCRTexts.marksheet,
       rawOCRTexts.aadhaarCard,
       rawOCRTexts.categoryProof || "",
-      selectedCategory
+      selectedCategory,
+      admissionType
     )
     
     console.log("Validation result:", validation)
     
-    // ========== NAME CLEANING FUNCTION ==========
     const cleanName = (name: string | null): string | null => {
       if (!name) return null;
       let cleaned = name
-        // Remove "RoT", "Roll", "Mother", "Date" and any following text
         .replace(/\s+RoT\s*\d*$/i, '')
         .replace(/\s+Roll\s+No.*$/i, '')
         .replace(/\s+Roll\s*\d*$/i, '')
@@ -365,12 +391,10 @@ const processDocumentVerification = async () => {
         .replace(/\s+Center.*$/i, '')
         .replace(/\s+Enrol\.?.*$/i, '')
         .replace(/\s+Category.*$/i, '')
-        // Remove trailing numbers or single letters
         .replace(/\s+[A-Z][a-z]?\d*$/, '')
         .replace(/\s+\d+$/, '')
         .trim();
       
-      // Fix common OCR mistakes
       const nameCorrections: Record<string, string> = {
         "GATKWAD": "GAIKWAD",
         "GATK WAD": "GAIKWAD",
@@ -387,14 +411,11 @@ const processDocumentVerification = async () => {
       
       return cleaned;
     };
-    // ========== END NAME CLEANING ==========
     
-    // Clean the name before storing
     const cleanedMarksheetName = cleanName(validation.data.marksheet.fullName);
     const cleanedAadhaarName = cleanName(validation.data.aadhaar.fullName);
     const cleanedCategoryName = cleanName(validation.data.category?.fullName);
     
-    // Get the best name from all documents
     const bestName = cleanedMarksheetName || cleanedAadhaarName || cleanedCategoryName;
     
     setCrossDocValidation({
@@ -413,11 +434,8 @@ const processDocumentVerification = async () => {
       }
     })
     
-    // ========== GET SGPA FROM OCR DATA ==========
-    // First check if SGPA is already in ocrData from document upload
     let sgpaValue = ocrData.extractedSGPA;
     
-    // If not, try to extract from marksheet raw text
     if (!sgpaValue && rawOCRTexts.marksheet) {
       console.log("🔍 Searching for SGPA in marksheet text...");
       const sgpaMatch = rawOCRTexts.marksheet.match(/SGPA\s*[:]?\s*(\d+\.?\d{1,2})/i);
@@ -427,7 +445,6 @@ const processDocumentVerification = async () => {
       }
     }
     
-    // If still not found, look for decimal in bottom of text
     if (!sgpaValue && rawOCRTexts.marksheet) {
       const lines = rawOCRTexts.marksheet.split('\n');
       const lastLines = lines.slice(-15).join('\n');
@@ -439,7 +456,6 @@ const processDocumentVerification = async () => {
     }
     
     console.log(`📊 Final SGPA value: ${sgpaValue || "NOT FOUND"}`);
-    // ========== END SGPA EXTRACTION ==========
     
     const combinedData = {
       fullName: bestName,
@@ -456,35 +472,30 @@ const processDocumentVerification = async () => {
     
     let autoFilledCount = 0
     
-    // Auto-fill name if empty and confidence is high
     if (bestName && !getValues("fullName") && validation.matchScore >= 70) {
       setValue("fullName", bestName)
       toast.info(`✓ Name auto-filled: ${bestName}`)
       autoFilledCount++
     }
     
-    // Auto-fill Aadhaar if empty
     if (validation.combinedData.aadhaarNumber && !getValues("aadhaarNumber") && validation.matchScore >= 70) {
       setValue("aadhaarNumber", validation.combinedData.aadhaarNumber)
       toast.info("✓ Aadhaar number auto-filled from document")
       autoFilledCount++
     }
     
-    // Auto-fill SGPA if empty and we have it from OCR
     if (sgpaValue && !getValues("sgpa") && admissionType === "SGPA") {
       setValue("sgpa", sgpaValue)
       toast.info(`✓ SGPA auto-filled: ${sgpaValue}`)
       autoFilledCount++
     }
     
-    // Auto-fill CET marks if empty
     if (validation.combinedData.marks && !getValues("cetMarks") && admissionType === "CET") {
       setValue("cetMarks", validation.combinedData.marks)
       toast.info(`✓ CET Marks auto-filled: ${validation.combinedData.marks}`)
       autoFilledCount++
     }
     
-    // Auto-fill category if empty
     if (validation.combinedData.category && !getValues("category") && validation.matchScore >= 70) {
       let normalizedCategory = validation.combinedData.category.toUpperCase()
       
@@ -502,7 +513,6 @@ const processDocumentVerification = async () => {
       }
     }
     
-    // Update ocrData with the extracted values
     setOcrData((prev) => ({
       ...prev,
       extractedName: bestName || prev.extractedName,
@@ -513,7 +523,6 @@ const processDocumentVerification = async () => {
       extractedMarks: validation.combinedData.marks || prev.extractedMarks,
     }))
     
-    // Show appropriate messages based on validation result
     if (!validation.isValid) {
       toast.error(`❌ Document Validation Failed! Score: ${validation.matchScore.toFixed(0)}%`)
       validation.issues.forEach(issue => toast.error(issue))
@@ -537,6 +546,7 @@ const processDocumentVerification = async () => {
     setIsVerifying(false)
   }
 }
+
   const nextStep = async () => {
     const fieldsToValidate: (keyof ApplicationFormData)[] = 
       step === 1 ? ["fullName", "email", "phone", "gender", "aadhaarNumber"] :
@@ -554,53 +564,57 @@ const processDocumentVerification = async () => {
     if (step > 1) setStep(step - 1)
   }
 
- 
-// In saveProgress function
 const saveProgress = async () => {
   setIsSaving(true);
   try {
-    // Compress documents before saving
     const compressedDocuments = await compressAllDocuments(documents);
-    
     const formData = getValues();
     
-    // IMPORTANT: Get the raw OCR text for marksheet
-    const rawText = rawOCRTexts.marksheet; // This contains the full extracted text
-    
-    // Pass all 4 parameters to validateApplication
-  const validation = validateApplication(
-  {
-    fullName: formData.fullName,
-    cetMarks: formData.cetMarks,
-    sgpa: formData.sgpa,
-    category: formData.category,
-    aadhaarNumber: formData.aadhaarNumber,
-  },
-  ocrData,
-  crossDocValidation,
-  rawOCRTexts.marksheet  // ← Pass the raw marksheet text
-);
+    const validation = validateApplication(
+      {
+        fullName: formData.fullName,
+        cetMarks: formData.cetMarks,
+        sgpa: formData.sgpa,
+        category: formData.category,
+        aadhaarNumber: formData.aadhaarNumber,
+      },
+      ocrData,
+      crossDocValidation,
+      rawOCRTexts.marksheet
+    );
 
     const { cetMarks, sgpa, ...rest } = formData;
 
-    const applicationData = {
+    // Clean all data for Firestore
+    const cleanedApplicationData = cleanForFirestore({
       userId: user!.uid,
       status: "draft" as const,
       ...rest,
       gender: selectedGender,
       documents: compressedDocuments,
-      ocrData,
-      validation,
-      crossDocumentValidation: crossDocValidation,
-      extractedData: extractedData,
-      ...(admissionType === "CET" ? { cetMarks } : { sgpa }),
-    };
+      ocrData: {
+        extractedName: ocrData.extractedName || null,
+        extractedMarks: ocrData.extractedMarks ?? null,
+        extractedSGPA: ocrData.extractedSGPA ?? null,
+        extractedCategory: ocrData.extractedCategory || null,
+        extractedAadhaar: ocrData.extractedAadhaar || null,
+        extractedCollege: ocrData.extractedCollege || null,
+        extractedRollNo: ocrData.extractedRollNo || null,
+        extractedDOB: ocrData.extractedDOB || null,
+        extractedPercentage: ocrData.extractedPercentage ?? null,
+        confidence: ocrData.confidence ?? null,
+      },
+      validation: cleanForFirestore(validation),
+      crossDocumentValidation: cleanForFirestore(crossDocValidation),
+      extractedData: cleanForFirestore(extractedData),
+      ...(admissionType === "CET" ? { cetMarks: cetMarks ?? null } : { sgpa: sgpa ?? null }),
+    });
 
     if (existingApp) {
-      await updateApplication(existingApp.id, applicationData);
+      await updateApplication(existingApp.id, cleanedApplicationData);
     } else {
-      const id = await createApplication(applicationData);
-      setExistingApp({ ...applicationData, id } as Application);
+      const id = await createApplication(cleanedApplicationData);
+      setExistingApp({ ...cleanedApplicationData, id } as Application);
     }
     
     toast.success("Progress saved");
@@ -611,6 +625,7 @@ const saveProgress = async () => {
     setIsSaving(false);
   }
 };
+
   const downloadApplication = () => {
     const formData = getValues()
     
@@ -817,14 +832,11 @@ const saveProgress = async () => {
     toast.success("Application downloaded successfully")
   }
 
-  // Direct submission handler without form
   const handleFormSubmit = async () => {
     console.log("Manual submission triggered by user click");
     
-    // Get form data
     const data = getValues();
     
-    // Check all required documents
     if (!documents.marksheet) {
       toast.error("❌ Please upload your marksheet/result")
       setStep(3)
@@ -849,25 +861,21 @@ const saveProgress = async () => {
       return
     }
 
-    // Check if verification was performed
     if (!crossDocValidation) {
       toast.error("❌ Please verify your documents first by clicking the 'Verify Documents' button")
       setStep(3)
       return
     }
 
-    // Verify user input matches extracted documents
     const inputVerification = verifyUserInputWithDocuments();
     
-    // Handle errors - Show dialog with Submit Anyway option
     if (!inputVerification.isValid) {
       setErrorDialogMessage("Verification Failed");
       setErrorDialogDetails(inputVerification.errors);
       setShowErrorDialog(true);
-      return; // Don't auto-submit, let user choose
+      return;
     }
 
-    // Handle warnings - Show warning popup but allow submission
     if (inputVerification.warnings.length > 0 || (crossDocValidation.warnings && crossDocValidation.warnings.length > 0)) {
       const allWarnings = [
         ...inputVerification.warnings,
@@ -877,29 +885,24 @@ const saveProgress = async () => {
       setWarningDialogMessage("Document Verification Warnings");
       setWarningDialogDetails(allWarnings);
       setShowWarningDialog(true);
-      return; // Wait for user to confirm in dialog
+      return;
     }
 
-    // If no warnings, proceed directly
     await submitApplication(data, inputVerification);
   };
 
-  // Separate function to handle actual submission
 const submitApplication = async (data: ApplicationFormData, inputVerification: any) => {
   setIsLoading(true);
   const loadingToast = toast.loading("Compressing images...", { duration: 5000 });
 
   try {
-    // Compress all documents before final submission
     toast.loading("Compressing images...", { id: loadingToast });
     const compressedDocuments = await compressAllDocuments(documents);
     
     toast.loading("Submitting application...", { id: loadingToast });
     
-    // IMPORTANT: Get the raw OCR text for marksheet
-    const rawText = rawOCRTexts.marksheet; // This contains the full extracted text
+    const rawText = rawOCRTexts.marksheet;
     
-    // Pass all 4 parameters to validateApplication
     const validation = validateApplication(
       {
         fullName: data.fullName,
@@ -910,30 +913,41 @@ const submitApplication = async (data: ApplicationFormData, inputVerification: a
       },
       ocrData,
       crossDocValidation,
-      rawText // ← ADD THIS 4th PARAMETER (raw OCR text)
+      rawText
     );
 
     const { cetMarks, sgpa, ...rest } = data;
 
-    const applicationData = {
+    const cleanedApplicationData = cleanForFirestore({
       userId: user!.uid,
       status: "pending" as const,
       ...rest,
       gender: selectedGender,
       documents: compressedDocuments,
-      ocrData,
-      validation,
-      crossDocumentValidation: crossDocValidation,
-      extractedData: extractedData,
-      userInputVerification: inputVerification,
+      ocrData: {
+        extractedName: ocrData.extractedName || null,
+        extractedMarks: ocrData.extractedMarks ?? null,
+        extractedSGPA: ocrData.extractedSGPA ?? null,
+        extractedCategory: ocrData.extractedCategory || null,
+        extractedAadhaar: ocrData.extractedAadhaar || null,
+        extractedCollege: ocrData.extractedCollege || null,
+        extractedRollNo: ocrData.extractedRollNo || null,
+        extractedDOB: ocrData.extractedDOB || null,
+        extractedPercentage: ocrData.extractedPercentage ?? null,
+        confidence: ocrData.confidence ?? null,
+      },
+      validation: cleanForFirestore(validation),
+      crossDocumentValidation: cleanForFirestore(crossDocValidation),
+      extractedData: cleanForFirestore(extractedData),
+      userInputVerification: cleanForFirestore(inputVerification),
       submittedAt: new Date().toISOString(),
-      ...(admissionType === "CET" ? { cetMarks } : { sgpa }),
-    };
+      ...(admissionType === "CET" ? { cetMarks: cetMarks ?? null } : { sgpa: sgpa ?? null }),
+    });
 
     if (existingApp) {
-      await updateApplication(existingApp.id, { ...applicationData, status: "pending" });
+      await updateApplication(existingApp.id, { ...cleanedApplicationData, status: "pending" });
     } else {
-      await createApplication(applicationData);
+      await createApplication(cleanedApplicationData);
     }
 
     toast.dismiss(loadingToast);
@@ -949,34 +963,29 @@ const submitApplication = async (data: ApplicationFormData, inputVerification: a
   }
 };
 
-  // Handle warning dialog confirmation
-const handleWarningConfirm = async () => {
-  setShowWarningDialog(false);
-  const data = getValues();
-  const inputVerification = verifyUserInputWithDocuments();
-  await submitApplication(data, inputVerification);
-};
+  const handleWarningConfirm = async () => {
+    setShowWarningDialog(false);
+    const data = getValues();
+    const inputVerification = verifyUserInputWithDocuments();
+    await submitApplication(data, inputVerification);
+  };
 
   const progress = (step / STEPS.length) * 100
 
-  const renderValidationBadge = (status: string) => {
-    switch (status) {
-      case "verified":
-        return <CheckCircle className="h-4 w-4 text-emerald-500" />
-      case "warning":
-        return <AlertCircle className="h-4 w-4 text-amber-500" />
-      case "error":
-        return <XCircle className="h-4 w-4 text-red-500" />
-      default:
-        return <Clock className="h-4 w-4 text-muted-foreground" />
-    }
+const renderValidationBadge = (status: string) => {
+  switch (status) {
+    case "verified":
+      return <CheckCircle className="h-4 w-4 text-emerald-500" />
+    case "warning":
+      return <AlertCircle className="h-4 w-4 text-amber-500" />
+    case "error":
+      return <XCircle className="h-4 w-4 text-red-500" />
+    default:
+      return <Clock className="h-4 w-4 text-muted-foreground" />
   }
+}
 
-  // Submit button is always enabled - no more disabling
   const canSubmit = true;
-
-  // Check if verify button should be enabled
-  const isVerifyEnabled = documents.marksheet && documents.aadhaarCard && !isVerifying;
   const isVerifyDisabled = !documents.marksheet || !documents.aadhaarCard || isVerifying;
 
   return (
@@ -1047,12 +1056,7 @@ const handleWarningConfirm = async () => {
       </div>
       <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
         <span className="text-sm font-medium text-muted-foreground">{admissionType === "CET" ? "CET Marks" : "SGPA / CGPA"}</span>
-        {/* Show SGPA from extractedData or ocrData */}
-        <span className="text-sm font-semibold">
-          {admissionType === "CET" 
-            ? (extractedData.marks || ocrData.extractedMarks || "Not found")
-            : (extractedData.sgpa || ocrData.extractedSGPA || "Not found")}
-        </span>
+        <span className="text-sm font-semibold">{extractedData.marks || extractedData.sgpa || "Not found"}</span>
       </div>
       <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
         <span className="text-sm font-medium text-muted-foreground">Category</span>
@@ -1453,111 +1457,126 @@ const handleWarningConfirm = async () => {
           )}
 
           {/* Verification Results */}
-          {crossDocValidation && (
-            <Card className={`shadow-md transition-all ${
-              crossDocValidation.isValid && crossDocValidation.warnings?.length === 0 
-                ? "border-emerald-500 bg-emerald-50/30" 
-                : crossDocValidation.isValid 
-                  ? "border-amber-500 bg-amber-50/30" 
-                  : "border-red-500 bg-red-50/30"
-            }`}>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  {crossDocValidation.isValid && crossDocValidation.warnings?.length === 0 ? (
-                    <CheckCircle className="h-5 w-5 text-emerald-600" />
-                  ) : crossDocValidation.isValid ? (
-                    <AlertCircle className="h-5 w-5 text-amber-600" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-red-600" />
-                  )}
-                  Document Verification Results
-                </CardTitle>
-                <CardDescription className="text-base">
-                  <span className="font-semibold">Match Score:</span> {crossDocValidation.matchScore.toFixed(0)}% | 
-                  <span className="ml-1">
-                    {crossDocValidation.isValid && crossDocValidation.warnings?.length === 0 
-                      ? " ✅ Perfect match" 
-                      : crossDocValidation.isValid 
-                        ? " ⚠️ Verified with warnings" 
-                        : " ❌ Validation failed"}
-                  </span>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {extractedData && (
-                  <div className="space-y-3">
-                    <h4 className="font-semibold text-sm flex items-center gap-2 text-emerald-700">
-                      <FileCheck className="h-4 w-4" />
-                      Verified Information from Documents
-                    </h4>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                        <span className="text-sm font-medium text-muted-foreground">Full Name</span>
-                        <span className="text-sm font-semibold">{extractedData.fullName || "Not found"}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                        <span className="text-sm font-medium text-muted-foreground">Aadhaar Number</span>
-                        <span className="text-sm font-mono font-semibold">{extractedData.aadhaarNumber || "Not found"}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                        <span className="text-sm font-medium text-muted-foreground">{admissionType === "CET" ? "CET Marks" : "SGPA / CGPA"}</span>
-                        <span className="text-sm font-semibold">{extractedData.marks || extractedData.sgpa || "Not found"}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                        <span className="text-sm font-medium text-muted-foreground">Category</span>
-                        <span className="text-sm font-semibold">{extractedData.category || "Not found"}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border md:col-span-2">
-                        <span className="text-sm font-medium text-muted-foreground">College</span>
-                        <span className="text-sm font-semibold">{extractedData.college || "Government College of Engineering, Nagpur"}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+         {/* Verification Results */}
+{crossDocValidation && (
+  <Card className={`shadow-md transition-all ${
+    crossDocValidation.isValid && crossDocValidation.warnings?.length === 0 
+      ? "border-emerald-500 bg-emerald-50/30" 
+      : crossDocValidation.isValid 
+        ? "border-amber-500 bg-amber-50/30" 
+        : "border-red-500 bg-red-50/30"
+  }`}>
+    <CardHeader>
+      <CardTitle className="text-lg flex items-center gap-2">
+        {crossDocValidation.isValid && crossDocValidation.warnings?.length === 0 ? (
+          <CheckCircle className="h-5 w-5 text-emerald-600" />
+        ) : crossDocValidation.isValid ? (
+          <AlertCircle className="h-5 w-5 text-amber-600" />
+        ) : (
+          <XCircle className="h-5 w-5 text-red-600" />
+        )}
+        Document Verification Results
+      </CardTitle>
+      <CardDescription className="text-base">
+        <span className="font-semibold">Match Score:</span> {crossDocValidation.matchScore.toFixed(0)}% | 
+        <span className="ml-1">
+          {crossDocValidation.isValid && crossDocValidation.warnings?.length === 0 
+            ? " ✅ Perfect match" 
+            : crossDocValidation.isValid 
+              ? " ⚠️ Verified with warnings" 
+              : " ❌ Validation failed"}
+        </span>
+      </CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {extractedData && (
+        <div className="space-y-3">
+          <h4 className="font-semibold text-sm flex items-center gap-2 text-emerald-700">
+            <FileCheck className="h-4 w-4" />
+            Verified Information from Documents
+          </h4>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+              <span className="text-sm font-medium text-muted-foreground">Full Name</span>
+              <span className="text-sm font-semibold">{extractedData.fullName || "Not found"}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+              <span className="text-sm font-medium text-muted-foreground">Aadhaar Number</span>
+              <span className="text-sm font-mono font-semibold">{extractedData.aadhaarNumber || "Not found"}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+              <span className="text-sm font-medium text-muted-foreground">{admissionType === "CET" ? "CET Marks" : "SGPA / CGPA"}</span>
+              <span className="text-sm font-semibold">{extractedData.marks || extractedData.sgpa || "Not found"}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+              <span className="text-sm font-medium text-muted-foreground">Category</span>
+              <span className="text-sm font-semibold">{extractedData.category || "Not found"}</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-white rounded-lg border md:col-span-2">
+              <span className="text-sm font-medium text-muted-foreground">College</span>
+              <span className="text-sm font-semibold">{extractedData.college || "Government College of Engineering, Nagpur"}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Name Verification</h4>
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                      <span className="text-sm">Marksheet vs Aadhaar</span>
-                      <div className="flex items-center gap-3">
-                        <div className="w-32 bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div 
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${crossDocValidation.details?.marksheetVsAadhaar?.similarity || 0}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium min-w-[50px]">{crossDocValidation.details?.marksheetVsAadhaar?.similarity?.toFixed(0) || 0}%</span>
-                        {renderValidationBadge(crossDocValidation.details?.marksheetVsAadhaar?.status || "pending")}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+      <div className="space-y-2">
+        <h4 className="font-medium text-sm">Name Verification</h4>
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+            <span className="text-sm">Marksheet vs Aadhaar</span>
+            <div className="flex items-center gap-3">
+              <div className="w-32 bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${crossDocValidation.details?.marksheetVsAadhaar?.similarity || 0}%` }}
+                />
+              </div>
+              <span className="text-sm font-medium min-w-[50px]">
+                {crossDocValidation.details?.marksheetVsAadhaar?.similarity?.toFixed(0) || 0}%
+              </span>
+              {(() => {
+                const status = crossDocValidation.details?.marksheetVsAadhaar?.status || "pending";
+                switch (status) {
+                  case "verified":
+                    return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+                  case "warning":
+                    return <AlertCircle className="h-4 w-4 text-amber-500" />;
+                  case "error":
+                    return <XCircle className="h-4 w-4 text-red-500" />;
+                  default:
+                    return <Clock className="h-4 w-4 text-muted-foreground" />;
+                }
+              })()}
+            </div>
+          </div>
+        </div>
+      </div>
 
-                {crossDocValidation.issues?.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm text-red-600">Issues Found (Must Fix)</h4>
-                    <ul className="list-disc list-inside text-sm text-red-600 space-y-1 bg-red-50 p-3 rounded-lg">
-                      {crossDocValidation.issues.map((issue: string, idx: number) => (
-                        <li key={idx}>{issue}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+      {crossDocValidation.issues?.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-medium text-sm text-red-600">Issues Found (Must Fix)</h4>
+          <ul className="list-disc list-inside text-sm text-red-600 space-y-1 bg-red-50 p-3 rounded-lg">
+            {crossDocValidation.issues.map((issue: string, idx: number) => (
+              <li key={idx}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
-                {crossDocValidation.warnings?.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm text-amber-600">Warnings</h4>
-                    <ul className="list-disc list-inside text-sm text-amber-600 space-y-1 bg-amber-50 p-3 rounded-lg">
-                      {crossDocValidation.warnings.map((warning: string, idx: number) => (
-                        <li key={idx}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+      {crossDocValidation.warnings?.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-medium text-sm text-amber-600">Warnings</h4>
+          <ul className="list-disc list-inside text-sm text-amber-600 space-y-1 bg-amber-50 p-3 rounded-lg">
+            {crossDocValidation.warnings.map((warning: string, idx: number) => (
+              <li key={idx}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </CardContent>
+  </Card>
+)}
         </div>
       )}
 
