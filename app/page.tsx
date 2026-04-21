@@ -198,12 +198,12 @@ export default function HomePage() {
             </p>
           </div>
           
-          <div className="grid gap-6 md:grid-cols-3 max-w-3xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-4 max-w-3xl mx-auto">
             <Card>
               <CardContent className="flex flex-col items-center pt-6">
                 <Phone className="h-8 w-8 text-primary mb-2" />
                 <p className="font-medium">Phone</p>
-                <p className="text-sm text-muted-foreground">+91 712 280 1234</p>
+                <p className="text-sm text-muted-foreground">+91 9545534767</p>
               </CardContent>
             </Card>
             
@@ -211,7 +211,7 @@ export default function HomePage() {
               <CardContent className="flex flex-col items-center pt-6">
                 <Mail className="h-8 w-8 text-primary mb-2" />
                 <p className="font-medium">Email</p>
-                <p className="text-sm text-muted-foreground">hostel@gcoen.ac.in</p>
+                <p className="text-sm text-muted-foreground">gorekaran@gmail.com</p>
               </CardContent>
             </Card>
             
@@ -219,7 +219,17 @@ export default function HomePage() {
               <CardContent className="flex flex-col items-center pt-6">
                 <MapPin className="h-8 w-8 text-primary mb-2" />
                 <p className="font-medium">Address</p>
-                <p className="text-sm text-muted-foreground text-center">GCOEN, Nagpur, MH</p>
+                <p className="text-sm text-muted-foreground text-center">GCOEN, Nagpur, new khapri</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex flex-col items-center pt-6">
+                
+                <p className="font-medium">Developed By</p>
+                <p className="text-sm text-muted-foreground text-center">Karan Gore</p>
+                <p className="text-sm text-muted-foreground text-center">Piyush Padole</p>
+                <p className="text-sm text-muted-foreground text-center">Ketan Gaikwad</p>
+                <p className="text-sm text-muted-foreground text-center">Rishika Bavistale</p>
               </CardContent>
             </Card>
           </div>
