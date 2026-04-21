@@ -1,5 +1,3 @@
-cat > vercel.json << EOF {
-    "installCommand": "pnpm install --no-frozen-lockfile",
-    "buildCommand": "pnpm run build"
+{
+    "installCommand": "pnpm install --no-frozen-lockfile"
 }
-EOF
