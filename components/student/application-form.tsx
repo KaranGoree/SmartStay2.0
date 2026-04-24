@@ -1476,6 +1476,7 @@ const renderValidationBadge = (status: string) => {
           <XCircle className="h-5 w-5 text-red-600" />
         )}
         Document Extraction Results
+        
       </CardTitle>
       <CardDescription className="text-base">
         <span className="font-semibold">Match Score:</span> {crossDocValidation.matchScore.toFixed(0)}% | 
