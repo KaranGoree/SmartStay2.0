@@ -254,36 +254,41 @@ export default function TasksPage() {
   }, [])
 
   const fetchAllData = async () => {
-    setLoading(true)
-    try {
-      await Promise.all([
-        fetchUsers(),
-        fetchComplaints(),
-        fetchLeaves(),
-        fetchAttendance(),
-        fetchAnnouncements(),
-      ])
-    } catch (error) {
-      console.error("Error fetching data:", error)
-      toast.error("Failed to load data")
-    } finally {
-      setLoading(false)
-    }
+  setLoading(true)
+  try {
+    // First fetch users
+    await fetchUsers()
+    
+    // Then fetch all dependent data
+    await Promise.all([
+      fetchComplaints(),
+      fetchLeaves(),
+      fetchAttendance(),
+      fetchAnnouncements(),
+    ])
+  } catch (error) {
+    console.error("Error fetching data:", error)
+    toast.error("Failed to load data")
+  } finally {
+    setLoading(false)
   }
+}
 
-  const fetchUsers = async () => {
-    try {
-      const usersRef = collection(db, "users")
-      const snapshot = await getDocs(usersRef)
-      const usersList = snapshot.docs.map(doc => ({
-        uid: doc.id,
-        ...doc.data()
-      })) as User[]
-      setUsers(usersList)
-    } catch (error) {
-      console.error("Error fetching users:", error)
-    }
+const fetchUsers = async () => {
+  try {
+    const usersRef = collection(db, "users")
+    const snapshot = await getDocs(usersRef)
+    const usersList = snapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data()
+    })) as User[]
+    setUsers(usersList)
+    return usersList // Return for chaining
+  } catch (error) {
+    console.error("Error fetching users:", error)
+    return []
   }
+}
 
   const fetchComplaints = async () => {
     try {
@@ -312,25 +317,28 @@ export default function TasksPage() {
   }
 
   const fetchLeaves = async () => {
-    try {
-      const leavesRef = collection(db, "leave_applications")
-      const snapshot = await getDocs(leavesRef)
-      const leavesList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as LeaveApplication[]
-      
-      const enrichedLeaves = leavesList.map(leave => ({
+  try {
+    const leavesRef = collection(db, "leave_applications")
+    const snapshot = await getDocs(leavesRef)
+    const leavesList = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as LeaveApplication[]
+    
+    const enrichedLeaves = leavesList.map(leave => {
+      const user = users.find(u => u.uid === leave.userId)
+      return {
         ...leave,
-        userName: users.find(u => u.uid === leave.userId)?.fullName || leave.userId,
-        roomNumber: users.find(u => u.uid === leave.userId)?.roomNumber,
-      }))
-      
-      setLeaves(enrichedLeaves)
-    } catch (error) {
-      console.error("Error fetching leaves:", error)
-    }
+        userName: user?.fullName || leave.userName || leave.userId || "Unknown User",
+        roomNumber: user?.roomNumber || leave.roomNumber || "N/A",
+      }
+    })
+    
+    setLeaves(enrichedLeaves)
+  } catch (error) {
+    console.error("Error fetching leaves:", error)
   }
+}
 
   const fetchAttendance = async () => {
     try {
